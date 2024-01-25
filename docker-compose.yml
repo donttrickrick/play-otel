@@ -1,0 +1,93 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+version: '3.9'
+x-default-logging: &logging
+  driver: "json-file"
+  options:
+    max-size: "5m"
+    max-file: "2"
+
+networks:
+  default:
+    name: opentelemetry-demo
+    driver: bridge
+
+services:
+  
+
+ 
+  # OpenTelemetry Collector
+  # otelcol:
+  #   image: otel/opentelemetry-collector-contrib:0.92.0
+  #   container_name: otel-col
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 125M
+  #   restart: unless-stopped
+  #   command: [ "--config=/etc/otelcol-config.yml" ]
+  #   volumes:
+  #     - ./otelcol-config.yml:/etc/otelcol-config.yml
+  #   ports:
+  #     - "4317"          # OTLP over gRPC receiver
+  #     - "4318"          # OTLP over HTTP receiver
+  #   logging: *logging
+  #   environment:
+  #     - 8080
+
+  otel-collector:
+    container_name: otel-otelcol1
+    image: otel/opentelemetry-collector-contrib
+    command: [ "--config=/etc/otelcol-config.yml" ]
+    volumes:
+      - ./otelcol-config.yml:/etc/otelcol-config.yml
+    ports:
+      - 1888:1888 # pprof extension
+      - 8888:8888 # Prometheus metrics exposed by the Collector
+      - 8889:8889 # Prometheus exporter metrics
+      - 13133:13133 # health_check extension
+      - "4317" # OTLP gRPC receiver
+      - 4318:4318 # OTLP http receiver
+      - 55679:55679 # zpages extension
+    
+  jaeger:
+    container_name: otel-jaeger1
+    image: jaegertracing/all-in-one:latest
+    command:
+      - "--memory.max-traces=8000"
+      - "--query.base-path=/jaeger/ui"
+      - "--prometheus.server-url=http://prometheus:9090"
+      - "--prometheus.query.normalize-calls=true"
+      - "--prometheus.query.normalize-duration=true"
+    environment:
+      - METRICS_STORAGE_TYPE=prometheus
+    ports:
+      - 16686:16686
+      - "4317"
+      # - 4318:4318
+      # - 9411:9411
+
+  prometheus:
+    container_name: otel-prometheus1
+    image: quay.io/prometheus/prometheus:v2.48.1
+    command:
+      - --web.console.templates=/etc/prometheus/consoles
+      - --web.console.libraries=/etc/prometheus/console_libraries
+      - --storage.tsdb.retention.time=1h
+      - --config.file=/etc/prometheus/prometheus-config.yaml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+      - --web.route-prefix=/
+      - --enable-feature=exemplar-storage
+      - --enable-feature=otlp-write-receiver
+    volumes:
+      - ./prometheus-config.yaml:/etc/prometheus/prometheus-config.yaml
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+    ports:
+      - "9090:9090"
+    logging: *logging
+
